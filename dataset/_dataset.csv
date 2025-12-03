@@ -1,0 +1,5 @@
+file,smiles,task,splitting,graphtask,class_number
+bace,smiles,label,random,classification,1
+bbbp,smiles,p_np,scaffold,classification,1
+ESOL,smiles,measured log solubility in mols per litre,reandom,regression,0
+tox21,smiles,"NR-AR|NR-AR-LBD|NR-AhR|NR-Aromatase|NR-ER|NR-ER-LBD|NR-PPAR-gamma|SR-ARE|SR-ATAD5|SR-HSE|SR-MMP|SR-p53",random,multitask,12
