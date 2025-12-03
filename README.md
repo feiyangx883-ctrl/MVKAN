@@ -153,16 +153,20 @@ The `KANLinear` layer computes:
 # Input normalization for stability
 x_normed = LayerNorm(x)
 
-# Compute Fourier basis: (batch, input_dim, grid_size, 2)
+# Compute Fourier basis
+# frequencies shape: (1, 1, grid_size) - broadcast with x
+# x shape: (batch, input_dim) -> unsqueeze to (batch, input_dim, 1)
 frequencies = [f_1, f_2, ..., f_K]  # learnable or fixed
-angles = x * frequencies  # (batch, input_dim, grid_size)
+angles = x.unsqueeze(-1) * frequencies  # (batch, input_dim, grid_size)
 cos_terms = cos(angles)
 sin_terms = sin(angles)
-fourier_basis = stack([cos_terms, sin_terms])
+fourier_basis = stack([cos_terms, sin_terms], dim=-1)  # (batch, input_dim, grid_size, 2)
 
-# Linear combination of Fourier features
+# Reshape and apply linear transformation
 # weight shape: (output_dim, input_dim, grid_size, 2)
-output = fourier_basis @ weight
+fourier_basis_flat = fourier_basis.reshape(batch, -1)  # (batch, input_dim * grid_size * 2)
+weight_flat = weight.reshape(output_dim, -1).T  # (input_dim * grid_size * 2, output_dim)
+output = fourier_basis_flat @ weight_flat  # (batch, output_dim)
 
 # Residual connection (when input_dim == output_dim)
 if use_residual:
@@ -281,13 +285,13 @@ python main.py --file bace --schema AR --model GIN --use_kan_readout True
 
 ### 4.1 Datasets
 
-We evaluate MVKAN on standard molecular property prediction benchmarks from MoleculeNet, including BACE (blood-brain barrier penetration prediction) and BBBP (binary classification for brain permeability). These datasets provide challenging real-world scenarios for evaluating molecular property prediction models.
+We evaluate MVKAN on standard molecular property prediction benchmarks from MoleculeNet, including BACE (β-secretase 1 binding affinity prediction) and BBBP (blood-brain barrier penetration). BACE can be used for either regression (binding affinity values) or binary classification (active/inactive). BBBP is a binary classification task. These datasets provide challenging real-world scenarios for evaluating molecular property prediction models.
 
 ### 4.2 Results Highlights
 
 MVKAN demonstrates consistent improvements over baseline methods:
-- **Classification tasks (BACE, BBBP)**: Higher AUC-ROC through multi-view integration
-- **Regression tasks**: Lower RMSE with Fourier-KAN's adaptive nonlinearities
+- **BACE**: Higher AUC-ROC (classification) or lower RMSE (regression) through multi-view integration
+- **BBBP**: Improved blood-brain barrier penetration prediction accuracy
 - **Interpretability**: Learned activation functions reveal task-specific patterns
 
 ### 4.3 Key Findings
@@ -360,8 +364,6 @@ If you find this work useful, please cite:
 ```bibtex
 @article{mvkan2024,
   title={MVKAN: Multi-View Kolmogorov-Arnold Networks for Molecular Property Prediction},
-  author={},
-  journal={},
   year={2024}
 }
 ```
