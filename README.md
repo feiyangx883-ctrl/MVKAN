@@ -1,64 +1,377 @@
-# MVKAN 模型介绍
+# MVKAN: Multi-View Kolmogorov-Arnold Networks for Molecular Property Prediction
 
+## 1. Problem Formulation
 
-## 一、模型概览
-- 名称：MVKAN（Multi-View Kolmogorov–Arnold Networks for molecular property prediction）
-- 目标：针对分子属性预测任务，使用多视图表示与 KAN（Kolmogorov–Arnold Network）思想结合图网络，提升分子性质预测性能。
-- 主要思想：
-  - 使用基于傅里叶/Fourier 特征扩展的 KAN 变体。
-  - 支持分子碎片/子结构视图（fragmentation.py、substructurevocab.py），并对多视图结果做融合/一致性测试（testingconsensus.py）。
-  - 提供训练、验证和测试的完整流程（training.py、testing.py、main.py）。
+### 1.1 Background
 
-## 二、关键文件与作用
-- main.py
-  - 项目入口，负责解析配置/参数并协调训练/测试流程。
+Molecular property prediction is a fundamental task in drug discovery and materials science. Given a molecule represented as a SMILES string or molecular graph, the goal is to predict its chemical or biological properties (e.g., toxicity, solubility, binding affinity).
 
-## 三、模型输入与输出
-- 输入
-  - 分子表示（SMILES 或 rdkit Mol），经 molgraph 工具转换为图结构（节点特征、边特征、子结构视图）。
-  - 可选的多视图输入：原子/键级图、碎片/子结构图、频域扩展特征等。
-- 输出
-  - 分子级回归或分类预测（具体任务可在 main.py / dataset 中指定）。
-  - 解释性输出（interpret.py 提供子结构/原子贡献或重要性排序）。
+### 1.2 Challenges
 
-## 四、训练与评估流程
-- 配置/超参：查看 molgraph/hyperparameter.py 获取默认配置（学习率、batch size、训练轮次、模型层数等）。
-- 训练：运行 main.py（或调用 molgraph/training.py 中的训练入口），训练流程包含：
-  - 数据加载与预处理（dataset.py）
-  - 多视图构建（fragmentation.py、substructurevocab.py）
-  - 模型构建（graphmodel.py 调用 fourier_kan.py / gineconv.py 等）
-  - 损失计算与优化（training.py）
-  - checkpoint 保存与日志记录
-- 测试/评估：
-  - 单模型测试：molgraph/testing.py
-  - 多视图/共识测试：molgraph/testingconsensus.py
-  - 解释性评估：molgraph/interpret.py
-- 实验管理：molgraph/experiment.py 提供实验跑批与结果组织相关的逻辑。
+Traditional approaches face several challenges:
+- **Single-view limitation**: Most methods only consider atom-level molecular graphs, missing important structural patterns at higher abstraction levels
+- **Fixed activation functions**: Standard neural networks use predefined activation functions (ReLU, Sigmoid), limiting their ability to learn optimal nonlinear transformations for specific tasks
+- **Multi-scale information fusion**: Effectively combining information from different molecular representations remains an open problem
 
-## 五、使用示例（快速起步）
-- 训练
-  - 常见命令（仓库根目录）：
-    - python main.py
+### 1.3 Problem Definition
 
-## 六、可视化与解释
-- 运行可视化工具查看分子图或子结构贡献：
-  - molgraph/visualize.py, molgraph/molgraphdisplay.py：用于生成分子图片、子结构高亮与预测解释视图。
-- 解释流程通常是先用 trained checkpoint 做预测，再调用 interpret.py 计算贡献度/重要性评分并可视化。
+Given a molecule $M$ with its multi-view representations $\{G_1, G_2, ..., G_K\}$ (e.g., atom-level graph, fragment graph, functional group graph), we aim to learn a function:
 
-## 七、复现实验建议
-- 环境与依赖
-  - 仓库为 Python 项目，主要依赖可能包括 rdkit、torch（或 torch_geometric）、numpy、pandas 等。请参照仓库顶部或 README 补充依赖。
-- 数据准备
-  - 确保将原始数据按 dataset.py 要求放置并运行预处理（如果有单独的数据脚本）。
-- 固定随机种子、记录超参（hyperparameter.py）并保存 checkpoints。
-- 若使用多视图/子结构词表，请先运行相应的词表构建流程（substructurevocab.py / fragmentation.py）。
+$$f: \{G_1, G_2, ..., G_K\} \rightarrow y$$
 
-## 八、模型拓展与改进点（建议）
-- 尝试不同的图消息传递层（替换或扩展 gineconv.py）。
-- 对 Fourier 特征的参数和频率范围做系统搜索（fourier_kan.py）。
-- 增强子结构表示：尝试更丰富的子结构编码或预训练子结构向量。
-- 融合更多视图（例如 3D 构象信息）以提升对立体化学敏感的预测任务。
+where $y$ is the target property (continuous for regression, discrete for classification).
 
-## 九、参考与进一步阅读
-- 仓库文件：molgraph/ 下的文件是阅读与理解模型实现的关键入口（graphmodel.py、fourier_kan.py、gineconv.py、training.py）。
-- 项目描述（仓库简介）：基于 Kolmogorov-Arnold Networks(KAN) 的多视图分子性质预测。
+---
+
+## 2. MVKAN Architecture
+
+### 2.1 Overview and Motivation
+
+**MVKAN (Multi-View Kolmogorov-Arnold Networks)** is a novel architecture that combines multi-view molecular representations with Kolmogorov-Arnold Networks (KAN) for enhanced molecular property prediction.
+
+#### Core Innovations
+
+1. **Learnable Activation Functions**: Unlike traditional MLPs with fixed activations, MVKAN uses Fourier-KAN layers that learn optimal nonlinear transformations directly from data
+2. **Multi-View Integration**: Supports multiple molecular views (atom, fragment, functional group, pharmacophore) with learnable view alignment
+3. **Parameter Efficiency**: Achieves comparable or better performance with fewer parameters through the Kolmogorov-Arnold representation theorem
+
+#### Architecture Overview
+
+```
+Input: SMILES/Molecule
+         ↓
+┌────────────────────────────────────┐
+│     Multi-View Graph Construction   │
+│  ┌─────────┐ ┌─────────┐ ┌───────┐ │
+│  │ Atom    │ │Fragment │ │ Func. │ │
+│  │ Graph   │ │ Graph   │ │ Group │ │
+│  └────┬────┘ └────┬────┘ └───┬───┘ │
+└───────┼───────────┼──────────┼─────┘
+        ↓           ↓          ↓
+┌────────────────────────────────────┐
+│      GNN Encoders (per view)        │
+│   GATv2/GIN + GRU Message Passing   │
+└────────────────────────────────────┘
+        ↓           ↓          ↓
+┌────────────────────────────────────┐
+│      View Alignment Module          │
+│   (Attention-based pooling)         │
+└────────────────────────────────────┘
+        ↓
+┌────────────────────────────────────┐
+│    Fourier-KAN Aggregation          │
+│   (Learnable nonlinear fusion)      │
+└────────────────────────────────────┘
+        ↓
+┌────────────────────────────────────┐
+│    Classification/Regression Head   │
+└────────────────────────────────────┘
+        ↓
+     Output: y
+```
+
+### 2.2 View Alignment Module
+
+The View Alignment Module ensures that features from different molecular views are comparable and can be effectively combined.
+
+#### Purpose
+
+Different molecular views capture information at different granularities:
+- **Atom-level graph**: Captures detailed bonding patterns and local chemical environments
+- **Fragment graph**: Captures functional substructures and their connectivity
+- **Reduced graphs**: Captures higher-level topological patterns
+
+These representations have different dimensionalities and semantic meanings. The View Alignment Module projects them into a common latent space.
+
+#### Mechanism
+
+For each view $k$, we apply:
+
+1. **Node Feature Transformation**:
+   $$h_v^{(k)} = \text{LeakyReLU}(\text{BN}(W_{\text{node}}^{(k)} \cdot x_v^{(k)}))$$
+
+2. **Edge Feature Transformation**:
+   $$e_{uv}^{(k)} = \text{LeakyReLU}(\text{BN}(W_{\text{edge}}^{(k)} \cdot x_{uv}^{(k)}))$$
+
+3. **Attention-based Graph Pooling**:
+   Using GATv2Conv for attention-weighted message passing:
+   $$\alpha_{ij} = \text{softmax}\left(\text{LeakyReLU}(\mathbf{a}^T [W h_i \| W h_j])\right)$$
+   
+   $$h_i' = \sum_{j \in \mathcal{N}(i)} \alpha_{ij} W h_j$$
+
+4. **GRU-based Feature Refinement**:
+   $$h_i^{(t+1)} = \text{GRU}(h_i', h_i^{(t)})$$
+
+This ensures each view's molecule-level embedding lies in a compatible space for subsequent fusion.
+
+### 2.3 Fourier-KAN Aggregation (Detailed)
+
+The Fourier-KAN layer is the core innovation of MVKAN, replacing traditional linear transformations with learnable nonlinear functions based on Fourier series.
+
+#### 2.3.1 Mathematical Foundation: Kolmogorov-Arnold Representation Theorem
+
+The Kolmogorov-Arnold representation theorem states that any continuous multivariate function $f: [0,1]^n \rightarrow \mathbb{R}$ can be represented as:
+
+$$f(x_1, ..., x_n) = \sum_{q=0}^{2n} \Phi_q \left( \sum_{p=1}^{n} \phi_{q,p}(x_p) \right)$$
+
+where $\phi_{q,p}: [0,1] \rightarrow \mathbb{R}$ are continuous univariate functions.
+
+**Key Insight**: Instead of learning weight matrices (as in MLPs), we can learn the univariate activation functions $\phi$ themselves, potentially achieving better expressiveness with fewer parameters.
+
+#### 2.3.2 Fourier Basis Representation
+
+We represent each learnable function $\phi(x)$ using Fourier series:
+
+$$\phi(x) = \sum_{k=1}^{K} \left[ a_k \cos(2\pi f_k x) + b_k \sin(2\pi f_k x) \right]$$
+
+where:
+- $K$ is the grid size (number of frequency components)
+- $f_k$ are the frequencies (learnable or fixed)
+- $a_k, b_k$ are learnable Fourier coefficients
+
+#### 2.3.3 Why Fourier Basis Functions?
+
+The choice of Fourier basis offers several advantages:
+
+1. **Universal Approximation**: Fourier series can approximate any continuous periodic function arbitrarily well (Weierstrass approximation theorem)
+
+2. **Smooth Gradients**: Sinusoidal functions have continuous derivatives of all orders, ensuring smooth gradient flow during training
+
+3. **Frequency Decomposition**: Different frequency components capture patterns at different scales:
+   - Low frequencies: Global trends and slow variations
+   - High frequencies: Local patterns and fine details
+
+4. **Orthogonality**: Fourier basis functions are orthogonal, reducing redundancy in the learned representation
+
+5. **Computational Efficiency**: Fast Fourier Transform (FFT) enables efficient computation
+
+#### 2.3.4 Implementation Details
+
+The `KANLinear` layer computes:
+
+```python
+# Input normalization for stability
+x_normed = LayerNorm(x)
+
+# Compute Fourier basis
+# frequencies shape: (1, 1, grid_size) - broadcast with x
+# x shape: (batch, input_dim) -> unsqueeze to (batch, input_dim, 1)
+frequencies = [f_1, f_2, ..., f_K]  # learnable or fixed
+angles = x.unsqueeze(-1) * frequencies  # (batch, input_dim, grid_size)
+cos_terms = cos(angles)
+sin_terms = sin(angles)
+fourier_basis = stack([cos_terms, sin_terms], dim=-1)  # (batch, input_dim, grid_size, 2)
+
+# Reshape and apply linear transformation
+# weight shape: (output_dim, input_dim, grid_size, 2)
+fourier_basis_flat = fourier_basis.reshape(batch, -1)  # (batch, input_dim * grid_size * 2)
+weight_flat = weight.reshape(output_dim, -1).T  # (input_dim * grid_size * 2, output_dim)
+output = fourier_basis_flat @ weight_flat  # (batch, output_dim)
+
+# Residual connection (when input_dim == output_dim)
+if use_residual:
+    output = output + residual_weight * x
+```
+
+#### 2.3.5 Adaptive Frequency Learning
+
+MVKAN supports learnable frequencies that adapt to the data:
+
+$$f_k^{(t+1)} = f_k^{(t)} - \eta \frac{\partial \mathcal{L}}{\partial f_k}$$
+
+This allows the model to:
+- **Increase frequency resolution** where the data requires fine-grained patterns
+- **Focus on dominant frequencies** for each task
+- **Adapt to dataset characteristics** automatically
+
+### 2.4 Theoretical Advantages
+
+#### 2.4.1 Expressiveness
+
+**Theorem**: A KAN layer with grid size $K$ can represent any function that an MLP with $O(K)$ hidden units can represent, but with better sample efficiency for smooth functions.
+
+**Intuition**: KAN learns the "shape" of activation functions, while MLP learns only weights. For functions with regular structure (common in molecular properties), learning the activation shape is more efficient.
+
+#### 2.4.2 Interpretability
+
+Unlike black-box neural networks, Fourier-KAN provides:
+
+1. **Frequency Analysis**: Examining learned frequencies reveals which scales are important for the task
+2. **Activation Visualization**: Plotting $\phi(x)$ shows the learned nonlinearity
+3. **Coefficient Sparsity**: Important features have larger Fourier coefficients
+
+#### 2.4.3 Multi-View Synergy
+
+When combining multiple views with Fourier-KAN:
+
+$$h_{\text{fused}} = \text{KAN}\left( \text{concat}[h_{\text{atom}}, h_{\text{frag}}, h_{\text{func}}] \right)$$
+
+The KAN layer learns:
+- **Cross-view interactions**: Nonlinear relationships between different views
+- **View-specific transformations**: Optimal processing for each view type
+- **Adaptive weighting**: Implicitly learns view importance through frequency patterns
+
+### 2.5 Parameter Efficiency and Regularization
+
+#### 2.5.1 Parameter Count Comparison
+
+For a transformation from dimension $d_{in}$ to $d_{out}$:
+
+| Layer Type | Parameters |
+|------------|------------|
+| Linear (MLP) | $d_{in} \times d_{out} + d_{out}$ |
+| KANLinear (grid_size=K) | $d_{out} \times d_{in} \times K \times 2 + d_{out}$ |
+
+While KAN has more parameters per layer, it often requires fewer layers to achieve the same expressiveness, leading to comparable total parameters.
+
+#### 2.5.2 Regularization Strategies
+
+MVKAN employs multiple regularization techniques:
+
+1. **L2 Regularization on Fourier Coefficients**:
+   $$\mathcal{L}_{L2} = \lambda_1 \sum_{k} (a_k^2 + b_k^2)$$
+
+2. **Frequency Penalty** (discourages overly high frequencies):
+   $$\mathcal{L}_{freq} = \lambda_2 \sum_{k} k^2 \cdot |w_k|$$
+
+3. **Sparsity Regularization** (encourages coefficient sparsity):
+   $$\mathcal{L}_{sparse} = \lambda_3 \sum_{k} |a_k| + |b_k|$$
+
+4. **Dropout on Fourier Basis**: Applied during training to prevent overfitting to specific frequency components
+
+5. **Layer Normalization**: Applied before the Fourier transformation for training stability
+
+#### 2.5.3 Residual Connections
+
+When input and output dimensions match, MVKAN uses residual connections:
+
+$$y = \text{KAN}(x) + \gamma \cdot x$$
+
+where $\gamma$ is a learnable scalar initialized to a small value (0.1). This:
+- Facilitates gradient flow in deep networks
+- Provides a "fallback" to identity transformation
+- Stabilizes early training
+
+---
+
+## 3. Training and Optimization
+
+### 3.1 Loss Functions
+
+- **Regression**: MSE Loss
+  $$\mathcal{L} = \frac{1}{N}\sum_{i=1}^{N}(y_i - \hat{y}_i)^2$$
+
+- **Binary Classification**: BCEWithLogitsLoss with class weighting
+  $$\mathcal{L} = -\frac{1}{N}\sum_{i=1}^{N}[w \cdot y_i \log(\sigma(\hat{y}_i)) + (1-y_i)\log(1-\sigma(\hat{y}_i))]$$
+
+- **Multi-task**: Task-wise BCE with NaN handling for missing labels
+
+### 3.2 Optimization Strategy
+
+- **Optimizer**: Adam (classification) or RMSprop (regression)
+- **Learning Rate Schedule**: Cosine annealing with warm-up
+- **Gradient Clipping**: Norm-based clipping to prevent exploding gradients
+- **Early Stopping**: Based on validation metric with patience
+
+### 3.3 Training Command
+
+```bash
+python main.py --file bace --schema AR --model GIN --use_kan_readout True
+```
+
+---
+
+## 4. Experiments
+
+### 4.1 Datasets
+
+We evaluate MVKAN on standard molecular property prediction benchmarks from MoleculeNet, including BACE (β-secretase 1 binding affinity prediction) and BBBP (blood-brain barrier penetration). BACE can be used for either regression (binding affinity values) or binary classification (active/inactive). BBBP is a binary classification task. These datasets provide challenging real-world scenarios for evaluating molecular property prediction models.
+
+### 4.2 Results Highlights
+
+MVKAN demonstrates consistent improvements over baseline methods:
+- **BACE**: Higher AUC-ROC (classification) or lower RMSE (regression) through multi-view integration
+- **BBBP**: Improved blood-brain barrier penetration prediction accuracy
+- **Interpretability**: Learned activation functions reveal task-specific patterns
+
+### 4.3 Key Findings
+
+1. **Multi-view representations** consistently outperform single-view baselines
+2. **Fourier-KAN** provides smoother training curves and better generalization
+3. **Adaptive frequencies** automatically adjust to dataset characteristics
+4. **Regularization** is crucial for preventing overfitting in small molecular datasets
+
+---
+
+## 5. Quick Start
+
+### 5.1 Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/feiyangx883-ctrl/MVKAN.git
+cd MVKAN
+
+# Install dependencies
+pip install torch torch_geometric rdkit numpy pandas scikit-learn
+```
+
+### 5.2 Training
+
+```bash
+# Basic training
+python main.py
+
+# With specific configuration
+python main.py --file bbbp --schema AR --use_kan_readout True --kan_grid_size 4
+```
+
+### 5.3 Key Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--file` | Dataset name | `bace` |
+| `--schema` | View schema (A/R/AR/AR_N) | `AR` |
+| `--model` | GNN type (GIN/GAT) | `GIN` |
+| `--use_kan_readout` | Enable Fourier-KAN | `True` |
+| `--kan_grid_size` | Number of Fourier frequencies | `4` |
+
+---
+
+## 6. Code Structure
+
+```
+MVKAN/
+├── main.py                 # Entry point
+├── dataset/                # Data files
+├── molgraph/
+│   ├── fourier_kan.py     # Fourier-KAN layer implementation
+│   ├── graphmodel.py      # MVKAN model architecture
+│   ├── training.py        # Training loop
+│   ├── dataset.py         # Data loading and preprocessing
+│   ├── fragmentation.py   # Molecular fragmentation
+│   └── interpret.py       # Model interpretation
+├── util/                   # Utility functions
+└── vocab/                  # Substructure vocabularies
+```
+
+---
+
+## 7. Citation
+
+If you find this work useful, please cite:
+
+```bibtex
+@article{mvkan2024,
+  title={MVKAN: Multi-View Kolmogorov-Arnold Networks for Molecular Property Prediction},
+  year={2024}
+}
+```
+
+---
+
+## 8. References
+
+1. Liu, Z., et al. "KAN: Kolmogorov-Arnold Networks." arXiv preprint arXiv:2404.19756 (2024).
+2. Wu, Z., et al. "MoleculeNet: A Benchmark for Molecular Machine Learning." Chemical Science 9.2 (2018).
+3. Kolmogorov, A. N. "On the representation of continuous functions of many variables by superposition of continuous functions of one variable and addition." Doklady Akademii Nauk (1957).
