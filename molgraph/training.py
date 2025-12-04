@@ -252,6 +252,32 @@ class Trainer(object):
                 print('ValRMSE ', str(np.array(overall_results['val_rmse']).mean()), '+/-', str(np.array(overall_results['val_rmse']).std()))
                 print('TestRMSE', str(np.array(overall_results['test_rmse']).mean()), '+/-', str(np.array(overall_results['test_rmse']).std()))
             
+            # ========== KAN 可解释性可视化 ==========
+            if getattr(self.args, 'use_kan_readout', False) or getattr(self.args, 'use_kan_classifier', False):
+                try:
+                    from molgraph.kan_visualizer import KANVisualizer
+                    
+                    # 加载最后一个 fold 的最佳模型
+                    checkpoint_path = (
+                        f'./dataset/{self.log_folder_name}/checkpoints/experiment-{self.exp_name}_'
+                        f'fold-{fold_number}_seed-{self.seed}_best-model.pth'
+                    )
+                    checkpoint = torch.load(checkpoint_path)
+                    self.model.load_state_dict(checkpoint)
+                    
+                    # 创建可视化器
+                    vis_dir = os.path.join('./dataset', self.log_folder_name, 'visualizations', self.exp_name)
+                    visualizer = KANVisualizer(self.model, device=self.device, save_dir=vis_dir)
+                    
+                    # 生成可视化
+                    print("\n" + "="*60)
+                    visualizer.generate_all_visualizations(test_loader=test_loader)
+                    print("="*60 + "\n")
+                    
+                except Exception as e:
+                    print(f"⚠️  Warning: KAN visualization failed: {e}")
+                    import traceback
+                    traceback.print_exc()
 
         elif self.args.graphtask == 'classification':
 
@@ -425,6 +451,32 @@ class Trainer(object):
                 print(f"Final Val AUC:  {val_auc_mean:.4f} +/- {val_auc_std:.4f}")
                 print(f"Final Test AUC: {test_auc_mean:.4f} +/- {test_auc_std:.4f}")
             
+            # ========== KAN 可解释性可视化 ==========
+            if getattr(self.args, 'use_kan_readout', False) or getattr(self.args, 'use_kan_classifier', False):
+                try:
+                    from molgraph.kan_visualizer import KANVisualizer
+                    
+                    # 加载最后一个 fold 的最佳模型
+                    checkpoint_path = (
+                        f'./dataset/{self.log_folder_name}/checkpoints/experiment-{self.exp_name}_'
+                        f'fold-{fold_number}_seed-{self.seed}_best-model.pth'
+                    )
+                    checkpoint = torch.load(checkpoint_path)
+                    self.model.load_state_dict(checkpoint)
+                    
+                    # 创建可视化器
+                    vis_dir = os.path.join('./dataset', self.log_folder_name, 'visualizations', self.exp_name)
+                    visualizer = KANVisualizer(self.model, device=self.device, save_dir=vis_dir)
+                    
+                    # 生成可视化
+                    print("\n" + "="*60)
+                    visualizer.generate_all_visualizations(test_loader=test_loader)
+                    print("="*60 + "\n")
+                    
+                except Exception as e:
+                    print(f"⚠️  Warning: KAN visualization failed: {e}")
+                    import traceback
+                    traceback.print_exc()
         
         elif self.args.graphtask == 'multitask':
             ### Train Multi-task
@@ -726,6 +778,33 @@ class Trainer(object):
                     f.write("Per-Task Test AUC:\n")
                     for task_idx, (mean_auc, std_auc) in enumerate(zip(task_auc_mean, task_auc_std)):
                         f.write(f"Task {task_idx}: {mean_auc:.4f} +/- {std_auc:.4f}\n")
+            
+            # ========== KAN 可解释性可视化 ==========
+            if getattr(self.args, 'use_kan_readout', False) or getattr(self.args, 'use_kan_classifier', False):
+                try:
+                    from molgraph.kan_visualizer import KANVisualizer
+                    
+                    # 加载最后一个 fold 的最佳模型
+                    checkpoint_path = (
+                        f'./dataset/{self.log_folder_name}/checkpoints/experiment-{self.exp_name}_'
+                        f'fold-{fold_number}_seed-{self.seed}_best-model.pth'
+                    )
+                    checkpoint = torch.load(checkpoint_path)
+                    self.model.load_state_dict(checkpoint)
+                    
+                    # 创建可视化器
+                    vis_dir = os.path.join('./dataset', self.log_folder_name, 'visualizations', self.exp_name)
+                    visualizer = KANVisualizer(self.model, device=self.device, save_dir=vis_dir)
+                    
+                    # 生成可视化
+                    print("\n" + "="*60)
+                    visualizer.generate_all_visualizations(test_loader=test_loader)
+                    print("="*60 + "\n")
+                    
+                except Exception as e:
+                    print(f"⚠️  Warning: KAN visualization failed: {e}")
+                    import traceback
+                    traceback.print_exc()
     
     
     def _save_training_curves(self, train_losses, val_losses, val_metrics, metric_label, fold_number):
