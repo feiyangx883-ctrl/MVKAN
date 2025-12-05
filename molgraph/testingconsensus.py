@@ -219,6 +219,11 @@ def getPredictionFold(args, args_test, all_dataset, datasets_splitted=None, prin
                     print(f"Error processing molecule {smiles} in fold {fold_number}: {e}")
                     continue
 
+    if len(molprediction) == 0:
+        warnings.warn("No molecules were successfully processed. Returning empty DataFrame.")
+        import pandas as pd
+        return pd.DataFrame(columns=['Fold', 'SMILES_original', 'SMILES', 'Split', 'Prediction', 'TrueValue', 'Schema', 'Node_ID', 'Node_Feature', 'Weight', 'Weight_Other'])
+    
     prediction_fold_df = pd.concat([p.to_dataframe() for p in molprediction], axis=0)
     return prediction_fold_df
 
@@ -434,6 +439,11 @@ def getSubstructureFold(args, args_test, all_dataset, datasets_splitted=None, pr
                     print(f"Error processing molecule {smiles} in fold {fold_number}: {e}")
                     continue
 
+    if len(molprediction) == 0:
+        warnings.warn("No molecules were successfully processed. Returning empty DataFrame.")
+        import pandas as pd
+        return pd.DataFrame(columns=['Fold', 'SMILES_original', 'SMILES', 'Split', 'Prediction', 'TrueValue', 'Schema', 'Node_ID', 'Node_Feature', 'Weight', 'Weight_Other'])
+    
     prediction_fold_df = pd.concat([p.to_dataframe() for p in molprediction], axis=0)
     return prediction_fold_df
     
