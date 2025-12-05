@@ -10,6 +10,7 @@ from molgraph.fragmentation import *
 # General library
 import argparse
 import numpy as np
+import warnings
 # pytorch
 import torch
 import pytorch_lightning as pl
@@ -161,7 +162,7 @@ def getPredictionFold(args, args_test, all_dataset, datasets_splitted=None, prin
                     if len(args.reduced) == 1:
                         sample_att_r = sample_att[args.reduced[0]]
                     elif len(args.reduced) > 1: 
-                        assert False, 'not implemented (more than on reduced graph)'
+                        raise NotImplementedError('Multiple reduced graphs not implemented yet')
                     else:
                         sample_att_r = None
                     # sample_att_g, sample_att_r = sample_att
@@ -356,7 +357,7 @@ def getSubstructureFold(args, args_test, all_dataset, datasets_splitted=None, pr
                     if len(args.reduced) == 1:
                         sample_att_r = sample_att[args.reduced[0]]
                     elif len(args.reduced) > 1: 
-                        assert False, 'not implemented (more than on reduced graph)'
+                        raise NotImplementedError('Multiple reduced graphs not implemented yet')
                     else:
                         sample_att_r = None
                     # sample_att_g, sample_att_r = sample_att
@@ -402,6 +403,7 @@ def getSubstructureFold(args, args_test, all_dataset, datasets_splitted=None, pr
                         frag_smarts = frag
                         frag_mol = Chem.MolFromSmarts(frag_smarts)
                         if frag_mol is None:
+                            warnings.warn(f"Failed to parse SMARTS pattern: {frag_smarts}. Skipping this fragment.")
                             continue
 
                         frag_match = mol.GetSubstructMatches(frag_mol)
@@ -416,8 +418,10 @@ def getSubstructureFold(args, args_test, all_dataset, datasets_splitted=None, pr
                                     attention_nonfrag.append(mask_graph_x['atom'][i])
                             # Validate fragment matching with safe checks
                             if len(attention_frag) != len(ff):
+                                warnings.warn(f"Fragment length mismatch for {frag_smarts}: expected {len(ff)}, got {len(attention_frag)}. Skipping.")
                                 continue
                             if len(attention_frag)+len(attention_nonfrag) != len(mask_graph_x['atom']):
+                                warnings.warn(f"Total attention count mismatch for {frag_smarts}. Skipping.")
                                 continue
                             molattentionsubstructure.append(MolAttentionSubstructure('x', i, frag_smarts, attention_frag, attention_nonfrag))
 

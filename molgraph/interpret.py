@@ -13,6 +13,7 @@ import os as os
 import numpy as np
 import random as random
 import copy as copy
+import warnings
 
 # scikit scipy
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -317,7 +318,8 @@ def mask_rtog(smiles, cliques, mask_graph_r):
     for i, c in enumerate(cliques):
         # Check if clique index exists in mask_graph_r
         if i not in mask_graph_r['atom']:
-            # Skip cliques that don't have corresponding attention weights
+            # Log warning and skip cliques that don't have corresponding attention weights
+            warnings.warn(f"Clique index {i} not found in mask_graph_r['atom']. Skipping this clique.")
             continue
         for a in c:
             # Check if atom index is within molecule bounds
