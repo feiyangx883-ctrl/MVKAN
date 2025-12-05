@@ -14,8 +14,8 @@ torch-geometric>=2.0.0
 torchmetrics>=0.7.0
 
 # RDKit for molecular visualization
-# Option 1: Use rdkit-pypi (easier installation via pip)
-rdkit>=2022.3.1
+# Use rdkit-pypi for pip installation
+rdkit-pypi>=2022.3.1
 
 # Alternatively, you can install RDKit via conda:
 # conda install -c conda-forge rdkit

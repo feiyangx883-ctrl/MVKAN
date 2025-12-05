@@ -32,23 +32,35 @@ import numpy as np
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-# 直接导入可视化模块（避免加载完整的 molgraph 包）
-import importlib.util
-viz_spec = importlib.util.spec_from_file_location(
-    'visualize_attention', 
-    os.path.join(project_root, 'molgraph', 'visualize_attention.py')
-)
-viz_module = importlib.util.module_from_spec(viz_spec)
-viz_spec.loader.exec_module(viz_module)
-
-# 从模块导入需要的函数
-visualize_molecule_attention = viz_module.visualize_molecule_attention
-visualize_multiple_molecules = viz_module.visualize_multiple_molecules
-save_attention_visualization = viz_module.save_attention_visualization
-quick_visualize = viz_module.quick_visualize
-generate_example_visualizations = viz_module.generate_example_visualizations
-normalize_attention_weights = viz_module.normalize_attention_weights
-create_atom_attention_mask = viz_module.create_atom_attention_mask
+# 尝试从 molgraph 包导入，如果失败则使用直接加载
+try:
+    from molgraph.visualize_attention import (
+        visualize_molecule_attention,
+        visualize_multiple_molecules,
+        save_attention_visualization,
+        quick_visualize,
+        generate_example_visualizations,
+        normalize_attention_weights,
+        create_atom_attention_mask
+    )
+except ImportError:
+    # 如果 molgraph 包有未安装的依赖，直接加载 visualize_attention 模块
+    import importlib.util
+    viz_spec = importlib.util.spec_from_file_location(
+        'visualize_attention', 
+        os.path.join(project_root, 'molgraph', 'visualize_attention.py')
+    )
+    viz_module = importlib.util.module_from_spec(viz_spec)
+    viz_spec.loader.exec_module(viz_module)
+    
+    # 从模块导入需要的函数
+    visualize_molecule_attention = viz_module.visualize_molecule_attention
+    visualize_multiple_molecules = viz_module.visualize_multiple_molecules
+    save_attention_visualization = viz_module.save_attention_visualization
+    quick_visualize = viz_module.quick_visualize
+    generate_example_visualizations = viz_module.generate_example_visualizations
+    normalize_attention_weights = viz_module.normalize_attention_weights
+    create_atom_attention_mask = viz_module.create_atom_attention_mask
 
 # RDKit
 from rdkit import Chem
@@ -138,7 +150,8 @@ def generate_simulated_attention(smiles: str, seed: int = None) -> np.ndarray:
     if seed is not None:
         np.random.seed(seed)
     else:
-        np.random.seed(hash(smiles) % 2**32)
+        # Use bitwise AND to ensure non-negative 32-bit value for reproducibility
+        np.random.seed(hash(smiles) & 0xFFFFFFFF)
     
     # 基础随机权重
     weights = np.random.uniform(0.1, 0.4, num_atoms)
@@ -307,8 +320,10 @@ def example_different_colormaps():
             figsize=(5, 4)
         )
         
-        # 保存临时图像并加载
-        temp_path = f"/tmp/temp_{cmap}.png"
+        # 保存临时图像并加载 (use tempfile for cross-platform compatibility)
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+            temp_path = tmp_file.name
         sub_fig.savefig(temp_path, dpi=100, bbox_inches='tight')
         plt.close(sub_fig)
         

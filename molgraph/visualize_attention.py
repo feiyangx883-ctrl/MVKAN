@@ -847,7 +847,8 @@ def generate_example_visualizations(
         num_atoms = mol.GetNumAtoms()
         
         # 生成模拟的注意力权重（使用有意义的分布）
-        np.random.seed(hash(smiles) % 2**32)
+        # Use bitwise AND to ensure non-negative 32-bit value for reproducibility
+        np.random.seed(hash(smiles) & 0xFFFFFFFF)
         base_weights = np.random.rand(num_atoms)
         
         # 让某些原子有更高的权重（模拟模型关注功能团）
