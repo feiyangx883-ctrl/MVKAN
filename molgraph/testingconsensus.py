@@ -159,10 +159,9 @@ def getPredictionFold(args, args_test, all_dataset, datasets_splitted=None, prin
                         sample_att_g = sample_att['atom']
                     else:
                         sample_att_g = None
-                    if len(args.reduced) == 1:
+                    if len(args.reduced) >= 1:
+                        # Use the first reduced graph for mask_graph_r computation
                         sample_att_r = sample_att[args.reduced[0]]
-                    elif len(args.reduced) > 1: 
-                        raise NotImplementedError('Multiple reduced graphs not implemented yet')
                     else:
                         sample_att_r = None
                     # sample_att_g, sample_att_r = sample_att
@@ -360,10 +359,9 @@ def getSubstructureFold(args, args_test, all_dataset, datasets_splitted=None, pr
                         sample_att_g = sample_att['atom']
                     else:
                         sample_att_g = None
-                    if len(args.reduced) == 1:
+                    if len(args.reduced) >= 1:
+                        # Use the first reduced graph for mask_graph_r computation
                         sample_att_r = sample_att[args.reduced[0]]
-                    elif len(args.reduced) > 1: 
-                        raise NotImplementedError('Multiple reduced graphs not implemented yet')
                     else:
                         sample_att_r = None
                     # sample_att_g, sample_att_r = sample_att
