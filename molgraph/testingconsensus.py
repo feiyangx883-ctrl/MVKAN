@@ -178,7 +178,9 @@ def getPredictionFold(args, args_test, all_dataset, datasets_splitted=None, prin
                         reduced_graph, cliques, edges = getReducedGraph(args, ['atom'], smiles, normalize=False)
                         for i, f in enumerate(reduced_graph.node_features):
                             f_tuple = getImportanceFeatures(['atom'], f)
-                            # Use .get() for safe dictionary access
+                            # Use .get() for safe dictionary access with warning for missing keys
+                            if i not in mask_graph_g['atom']:
+                                warnings.warn(f"Atom index {i} not found in mask_graph_g. Using default weight 0.0.")
                             weight = mask_graph_g['atom'].get(i, 0.0)
                             molattention.append(MolAttention('atom', i, f_tuple, weight))
 
@@ -194,7 +196,9 @@ def getPredictionFold(args, args_test, all_dataset, datasets_splitted=None, prin
                                 else:
                                     f_tuple = getImportanceFeatures([r], reduced_graph.cliques_smiles[i])
                                 
-                                # Use .get() for safe dictionary access
+                                # Use .get() for safe dictionary access with warning for missing keys
+                                if i not in mask_graph_r['atom']:
+                                    warnings.warn(f"Reduced graph index {i} not found in mask_graph_r. Using default weight 0.0.")
                                 weight = mask_graph_r['atom'].get(i, 0.0)
                                 molattention.append(MolAttention(r, i, f_tuple, weight))
 
@@ -205,7 +209,9 @@ def getPredictionFold(args, args_test, all_dataset, datasets_splitted=None, prin
                             reduced_graph, cliques, edges = getReducedGraph(args, ['atom'], smiles, normalize=False)
                             for i, f in enumerate(reduced_graph.node_features):
                                 f_tuple = getImportanceFeatures(['atom'], f)
-                                # Use .get() for safe dictionary access
+                                # Use .get() for safe dictionary access with warning for missing keys
+                                if i not in mask_graph_x['atom']:
+                                    warnings.warn(f"Atom index {i} not found in mask_graph_x. Using default weight 0.0.")
                                 weight = mask_graph_x['atom'].get(i, 0.0)
                                 molattention.append(MolAttention('x', i, f_tuple, weight))
 

@@ -322,7 +322,9 @@ def mask_rtog(smiles, cliques, mask_graph_r):
             warnings.warn(f"Clique index {i} not found in mask_graph_r['atom']. Skipping this clique.")
             continue
         for a in c:
-            # Check if atom index is within molecule bounds
+            # Defensive check: ensure atom index 'a' from clique is within the molecule's atom range.
+            # While mask_graph_rtog['atom'] is initialized with all atom indices from the molecule,
+            # cliques may contain invalid atom indices in edge cases with malformed data.
             if a in mask_graph_rtog['atom']:
                 # overlap node between cliques
                 mask_graph_rtog['atom'][a] += mask_graph_r['atom'][i] # sum
