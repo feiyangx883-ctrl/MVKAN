@@ -301,15 +301,30 @@ def mask_rtog(smiles, cliques, mask_graph_r):
     mask_graph_rtog['atom'] = {}
     mask_graph_rtog['bond'] = {}
 
+    # Validate SMILES and get molecule
     mol = smiles_to_mol(smiles, with_atom_index=True)
-    for i, n in enumerate(range(mol.GetNumAtoms())):
+    if mol is None:
+        raise ValueError(f"Invalid SMILES string: {smiles}")
+
+    num_atoms = mol.GetNumAtoms()
+    for i, n in enumerate(range(num_atoms)):
         mask_graph_rtog['atom'][n] = 0
 
+    # Validate mask_graph_r structure
+    if mask_graph_r is None or 'atom' not in mask_graph_r:
+        raise ValueError("Invalid mask_graph_r structure: missing 'atom' key")
+
     for i, c in enumerate(cliques):
+        # Check if clique index exists in mask_graph_r
+        if i not in mask_graph_r['atom']:
+            # Skip cliques that don't have corresponding attention weights
+            continue
         for a in c:
-            # overlap node between cliques
-            mask_graph_rtog['atom'][a] += mask_graph_r['atom'][i] # sum
-            # mask_graph_rtog['atom'][a] = max(mask_graph_rtog['atom'][a], mask_graph_r['atom'][i]) # max
+            # Check if atom index is within molecule bounds
+            if a in mask_graph_rtog['atom']:
+                # overlap node between cliques
+                mask_graph_rtog['atom'][a] += mask_graph_r['atom'][i] # sum
+                # mask_graph_rtog['atom'][a] = max(mask_graph_rtog['atom'][a], mask_graph_r['atom'][i]) # max
 
     mask_graph_rtog = minmaxnormalize(mask_graph_rtog)
 
