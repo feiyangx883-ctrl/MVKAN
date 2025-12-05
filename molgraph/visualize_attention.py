@@ -929,6 +929,238 @@ def visualize_from_tester(
     return saved_files
 
 
+def visualize_multiview_attention(
+    smiles: str,
+    attention_dict: Dict[str, np.ndarray],
+    title: Optional[str] = None,
+    output_path: Optional[str] = None,
+    figsize: Tuple[int, int] = None,
+    dpi: int = 300
+) -> plt.Figure:
+    """
+    可视化多视图注意力权重，对比不同视图的注意力分布。
+    
+    用于展示 MVKAN 模型中原子视图和子结构视图的注意力差异，
+    突出多视图模型相比基准模型的优势。
+    
+    Args:
+        smiles: 分子的 SMILES 字符串
+        attention_dict: 多视图注意力权重字典
+            {
+                'atom': np.ndarray,           # 原子级注意力
+                'substructure': np.ndarray,   # 子结构注意力 (可选)
+                'functional': np.ndarray,     # 功能团注意力 (可选)
+                ...
+            }
+        title: 图像总标题
+        output_path: 输出文件路径（可选，如提供则自动保存）
+        figsize: 图像尺寸，默认根据视图数量自动计算
+        dpi: 图像分辨率
+    
+    Returns:
+        matplotlib Figure 对象
+    
+    Example:
+        >>> smiles = "CC(=O)OC1=CC=CC=C1C(=O)O"  # Aspirin
+        >>> attention = {
+        ...     'atom': np.array([0.1, 0.3, 0.9, ...]),
+        ...     'substructure': np.array([0.2, 0.8, ...])
+        ... }
+        >>> fig = visualize_multiview_attention(
+        ...     smiles, attention,
+        ...     title="Multi-view Attention Comparison",
+        ...     output_path="results/attention_visualization/multiview.png"
+        ... )
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Invalid SMILES: {smiles}")
+    
+    num_views = len(attention_dict)
+    if num_views == 0:
+        raise ValueError("attention_dict cannot be empty")
+    
+    # 自动计算图像尺寸
+    if figsize is None:
+        figsize = (6 * num_views, 6)
+    
+    fig, axes = plt.subplots(1, num_views, figsize=figsize, dpi=dpi)
+    
+    # 确保 axes 是列表形式
+    if num_views == 1:
+        axes = [axes]
+    
+    view_names = list(attention_dict.keys())
+    cmap_name = 'RdBu_r'
+    
+    for i, (view_name, weights) in enumerate(attention_dict.items()):
+        ax = axes[i]
+        
+        try:
+            weights = np.array(weights).flatten()
+            
+            # 创建注意力掩码
+            attention_mask = create_atom_attention_mask(mol, weights, None)
+            
+            # 绘制分子
+            mol_size = (450, 400)
+            svg = draw_molecule_with_attention(mol, attention_mask, size=mol_size, cmap_name=cmap_name)
+            
+            # 转换为图像
+            try:
+                from cairosvg import svg2png
+                png_data = svg2png(bytestring=svg.encode('utf-8'), dpi=dpi)
+                mol_img = Image.open(BytesIO(png_data))
+            except ImportError:
+                drawer = rdMolDraw2D.MolDraw2DCairo(mol_size[0], mol_size[1])
+                rdDepictor.Compute2DCoords(mol)
+                mol_prep = rdMolDraw2D.PrepareMolForDrawing(mol)
+                cmap = create_attention_colormap(cmap_name)
+                highlight_colors = {k: weight_to_color(v, cmap) for k, v in attention_mask.items()}
+                drawer.DrawMolecule(mol_prep, highlightAtoms=list(attention_mask.keys()),
+                                   highlightAtomColors=highlight_colors)
+                drawer.FinishDrawing()
+                mol_img = Image.open(BytesIO(drawer.GetDrawingText()))
+            
+            ax.imshow(mol_img)
+            ax.axis('off')
+            
+            # 视图名称作为子标题
+            view_title = view_name.replace('_', ' ').title() + ' View'
+            ax.set_title(view_title, fontsize=12, fontweight='bold', pad=10)
+            
+        except Exception as e:
+            ax.text(0.5, 0.5, f"Error: {str(e)[:40]}", 
+                   ha='center', va='center', transform=ax.transAxes, fontsize=9)
+            ax.axis('off')
+    
+    # 添加总标题
+    if title:
+        fig.suptitle(title, fontsize=14, fontweight='bold', y=1.02)
+    
+    # 添加统一颜色条
+    cmap = create_attention_colormap(cmap_name)
+    norm = Normalize(vmin=0, vmax=1)
+    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes, fraction=0.02, pad=0.02)
+    cbar.set_label('Attention Weight', fontsize=11)
+    
+    # 添加 SMILES 显示
+    display_smiles = smiles if len(smiles) <= 60 else smiles[:57] + "..."
+    fig.text(0.5, -0.02, f"SMILES: {display_smiles}", ha='center', fontsize=9, family='monospace')
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    if output_path:
+        os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
+        fig.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
+        print(f"✓ Multi-view visualization saved to: {output_path}")
+    
+    return fig
+
+
+def visualize_attention_comparison(
+    smiles: str,
+    kan_attention: np.ndarray,
+    baseline_attention: np.ndarray,
+    title: Optional[str] = None,
+    output_path: Optional[str] = None,
+    figsize: Tuple[int, int] = (14, 6),
+    dpi: int = 300
+) -> plt.Figure:
+    """
+    对比 KAN 模型和基准模型的注意力分布。
+    
+    用于突出展示多视图 KAN 模型与传统基准模型在注意力分配上的差异。
+    
+    Args:
+        smiles: 分子的 SMILES 字符串
+        kan_attention: MVKAN 模型的注意力权重
+        baseline_attention: 基准模型的注意力权重
+        title: 图像标题
+        output_path: 输出文件路径
+        figsize: 图像尺寸
+        dpi: 图像分辨率
+    
+    Returns:
+        matplotlib Figure 对象
+    
+    Example:
+        >>> fig = visualize_attention_comparison(
+        ...     "CCO",
+        ...     kan_attention=np.array([0.2, 0.5, 0.9]),
+        ...     baseline_attention=np.array([0.3, 0.4, 0.5]),
+        ...     output_path="results/attention_visualization/comparison.png"
+        ... )
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Invalid SMILES: {smiles}")
+    
+    fig, axes = plt.subplots(1, 3, figsize=figsize, dpi=dpi)
+    
+    # 准备数据
+    kan_weights = normalize_attention_weights(np.array(kan_attention).flatten())
+    baseline_weights = normalize_attention_weights(np.array(baseline_attention).flatten())
+    diff_weights = kan_weights - baseline_weights  # 差异
+    diff_weights = (diff_weights - diff_weights.min()) / (diff_weights.max() - diff_weights.min() + 1e-8)
+    
+    attention_sets = [
+        (kan_weights, "MVKAN Model", 'RdBu_r'),
+        (baseline_weights, "Baseline Model", 'RdBu_r'),
+        (diff_weights, "Difference (KAN - Baseline)", 'coolwarm')
+    ]
+    
+    mol_size = (400, 350)
+    
+    for i, (weights, subtitle, cmap_name) in enumerate(attention_sets):
+        ax = axes[i]
+        
+        try:
+            attention_mask = create_atom_attention_mask(mol, weights, None)
+            svg = draw_molecule_with_attention(mol, attention_mask, size=mol_size, cmap_name=cmap_name)
+            
+            try:
+                from cairosvg import svg2png
+                png_data = svg2png(bytestring=svg.encode('utf-8'), dpi=dpi)
+                mol_img = Image.open(BytesIO(png_data))
+            except ImportError:
+                drawer = rdMolDraw2D.MolDraw2DCairo(mol_size[0], mol_size[1])
+                rdDepictor.Compute2DCoords(mol)
+                mol_prep = rdMolDraw2D.PrepareMolForDrawing(mol)
+                cmap = create_attention_colormap(cmap_name)
+                highlight_colors = {k: weight_to_color(v, cmap) for k, v in attention_mask.items()}
+                drawer.DrawMolecule(mol_prep, highlightAtoms=list(attention_mask.keys()),
+                                   highlightAtomColors=highlight_colors)
+                drawer.FinishDrawing()
+                mol_img = Image.open(BytesIO(drawer.GetDrawingText()))
+            
+            ax.imshow(mol_img)
+            ax.axis('off')
+            ax.set_title(subtitle, fontsize=11, fontweight='bold', pad=10)
+            
+        except Exception as e:
+            ax.text(0.5, 0.5, f"Error: {str(e)[:40]}", 
+                   ha='center', va='center', transform=ax.transAxes, fontsize=9)
+            ax.axis('off')
+    
+    # 添加总标题
+    if title:
+        fig.suptitle(title, fontsize=14, fontweight='bold', y=1.02)
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    if output_path:
+        os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
+        fig.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
+        print(f"✓ Comparison visualization saved to: {output_path}")
+    
+    return fig
+
+
 if __name__ == '__main__':
     """
     模块测试代码
