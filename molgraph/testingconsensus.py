@@ -161,7 +161,18 @@ def getPredictionFold(args, args_test, all_dataset, datasets_splitted=None, prin
                         sample_att_g = None
                     if len(args.reduced) >= 1:
                         # Use the first reduced graph for mask_graph_r computation
-                        sample_att_r = sample_att[args.reduced[0]]
+                        reduced_key = args.reduced[0]
+                        if reduced_key in sample_att:
+                            sample_att_r = sample_att[reduced_key]
+                        else:
+                            # Try to find any available reduced graph key
+                            available_keys = [k for k in sample_att.keys() if k != 'atom']
+                            if available_keys:
+                                sample_att_r = sample_att[available_keys[0]]
+                                warnings.warn(f"Reduced graph '{reduced_key}' not found in attention. Using '{available_keys[0]}' instead.")
+                            else:
+                                sample_att_r = None
+                                warnings.warn(f"No reduced graph attention found. Skipping reduced graph processing.")
                     else:
                         sample_att_r = None
                     # sample_att_g, sample_att_r = sample_att
@@ -366,7 +377,18 @@ def getSubstructureFold(args, args_test, all_dataset, datasets_splitted=None, pr
                         sample_att_g = None
                     if len(args.reduced) >= 1:
                         # Use the first reduced graph for mask_graph_r computation
-                        sample_att_r = sample_att[args.reduced[0]]
+                        reduced_key = args.reduced[0]
+                        if reduced_key in sample_att:
+                            sample_att_r = sample_att[reduced_key]
+                        else:
+                            # Try to find any available reduced graph key
+                            available_keys = [k for k in sample_att.keys() if k != 'atom']
+                            if available_keys:
+                                sample_att_r = sample_att[available_keys[0]]
+                                warnings.warn(f"Reduced graph '{reduced_key}' not found in attention. Using '{available_keys[0]}' instead.")
+                            else:
+                                sample_att_r = None
+                                warnings.warn(f"No reduced graph attention found. Skipping reduced graph processing.")
                     else:
                         sample_att_r = None
                     # sample_att_g, sample_att_r = sample_att
