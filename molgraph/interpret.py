@@ -13,6 +13,7 @@ import os as os
 import numpy as np
 import random as random
 import copy as copy
+import warnings
 
 # scikit scipy
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -271,11 +272,14 @@ def display_interpret_weight(mol, cliques, edges, mask_graph_g, mask_graph_r, sc
 def mask_graph(d_att_g):
     mask_graph_g = {'atom': dict(), 'bond': dict()}
 
-    d_att_g_index = np.array(d_att_g[0], dtype=int)
-    d_att_g_weight = np.array(d_att_g[1], dtype=float)
+    # Move tensors to CPU before converting to numpy
+    d_att_g_0 = d_att_g[0].cpu() if hasattr(d_att_g[0], 'cpu') else d_att_g[0]
+    d_att_g_1 = d_att_g[1].cpu() if hasattr(d_att_g[1], 'cpu') else d_att_g[1]
+    d_att_g_index = np.array(d_att_g_0, dtype=int)
+    d_att_g_weight = np.array(d_att_g_1, dtype=float)
 
     for i, w in zip(d_att_g_index[0], d_att_g_weight):
-        mask_graph_g['atom'][int(i)] = float(w.item(0))
+        mask_graph_g['atom'][int(i)] = float(w.item(0) if hasattr(w, 'item') else w)
 
     mask_graph_g = minmaxnormalize(mask_graph_g)
 
@@ -284,11 +288,14 @@ def mask_graph(d_att_g):
 def mask_reduced(d_att_r):
     mask_graph_r = {'atom': dict(), 'bond': dict()}
 
-    d_att_r_index = np.array(d_att_r[0])
-    d_att_r_weight = np.array(d_att_r[1])
+    # Move tensors to CPU before converting to numpy
+    d_att_r_0 = d_att_r[0].cpu() if hasattr(d_att_r[0], 'cpu') else d_att_r[0]
+    d_att_r_1 = d_att_r[1].cpu() if hasattr(d_att_r[1], 'cpu') else d_att_r[1]
+    d_att_r_index = np.array(d_att_r_0)
+    d_att_r_weight = np.array(d_att_r_1)
 
     for i, w in zip(d_att_r_index[0], d_att_r_weight):
-        mask_graph_r['atom'][int(i)] = float(w.item(0))
+        mask_graph_r['atom'][int(i)] = float(w.item(0) if hasattr(w, 'item') else w)
 
     mask_graph_r = minmaxnormalize(mask_graph_r)
 
@@ -301,15 +308,33 @@ def mask_rtog(smiles, cliques, mask_graph_r):
     mask_graph_rtog['atom'] = {}
     mask_graph_rtog['bond'] = {}
 
+    # Validate SMILES and get molecule
     mol = smiles_to_mol(smiles, with_atom_index=True)
-    for i, n in enumerate(range(mol.GetNumAtoms())):
+    if mol is None:
+        raise ValueError(f"Invalid SMILES string: {smiles}")
+
+    num_atoms = mol.GetNumAtoms()
+    for i, n in enumerate(range(num_atoms)):
         mask_graph_rtog['atom'][n] = 0
 
+    # Validate mask_graph_r structure
+    if mask_graph_r is None or 'atom' not in mask_graph_r:
+        raise ValueError("Invalid mask_graph_r structure: missing 'atom' key")
+
     for i, c in enumerate(cliques):
+        # Check if clique index exists in mask_graph_r
+        if i not in mask_graph_r['atom']:
+            # Log warning and skip cliques that don't have corresponding attention weights
+            warnings.warn(f"Clique index {i} not found in mask_graph_r['atom']. Skipping this clique.")
+            continue
         for a in c:
-            # overlap node between cliques
-            mask_graph_rtog['atom'][a] += mask_graph_r['atom'][i] # sum
-            # mask_graph_rtog['atom'][a] = max(mask_graph_rtog['atom'][a], mask_graph_r['atom'][i]) # max
+            # Defensive check: ensure atom index 'a' from clique is within the molecule's atom range.
+            # While mask_graph_rtog['atom'] is initialized with all atom indices from the molecule,
+            # cliques may contain invalid atom indices in edge cases with malformed data.
+            if a in mask_graph_rtog['atom']:
+                # overlap node between cliques
+                mask_graph_rtog['atom'][a] += mask_graph_r['atom'][i] # sum
+                # mask_graph_rtog['atom'][a] = max(mask_graph_rtog['atom'][a], mask_graph_r['atom'][i]) # max
 
     mask_graph_rtog = minmaxnormalize(mask_graph_rtog)
 
