@@ -272,11 +272,14 @@ def display_interpret_weight(mol, cliques, edges, mask_graph_g, mask_graph_r, sc
 def mask_graph(d_att_g):
     mask_graph_g = {'atom': dict(), 'bond': dict()}
 
-    d_att_g_index = np.array(d_att_g[0], dtype=int)
-    d_att_g_weight = np.array(d_att_g[1], dtype=float)
+    # Move tensors to CPU before converting to numpy
+    d_att_g_0 = d_att_g[0].cpu() if hasattr(d_att_g[0], 'cpu') else d_att_g[0]
+    d_att_g_1 = d_att_g[1].cpu() if hasattr(d_att_g[1], 'cpu') else d_att_g[1]
+    d_att_g_index = np.array(d_att_g_0, dtype=int)
+    d_att_g_weight = np.array(d_att_g_1, dtype=float)
 
     for i, w in zip(d_att_g_index[0], d_att_g_weight):
-        mask_graph_g['atom'][int(i)] = float(w.item(0))
+        mask_graph_g['atom'][int(i)] = float(w.item(0) if hasattr(w, 'item') else w)
 
     mask_graph_g = minmaxnormalize(mask_graph_g)
 
@@ -285,11 +288,14 @@ def mask_graph(d_att_g):
 def mask_reduced(d_att_r):
     mask_graph_r = {'atom': dict(), 'bond': dict()}
 
-    d_att_r_index = np.array(d_att_r[0])
-    d_att_r_weight = np.array(d_att_r[1])
+    # Move tensors to CPU before converting to numpy
+    d_att_r_0 = d_att_r[0].cpu() if hasattr(d_att_r[0], 'cpu') else d_att_r[0]
+    d_att_r_1 = d_att_r[1].cpu() if hasattr(d_att_r[1], 'cpu') else d_att_r[1]
+    d_att_r_index = np.array(d_att_r_0)
+    d_att_r_weight = np.array(d_att_r_1)
 
     for i, w in zip(d_att_r_index[0], d_att_r_weight):
-        mask_graph_r['atom'][int(i)] = float(w.item(0))
+        mask_graph_r['atom'][int(i)] = float(w.item(0) if hasattr(w, 'item') else w)
 
     mask_graph_r = minmaxnormalize(mask_graph_r)
 
