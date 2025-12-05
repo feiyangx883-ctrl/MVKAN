@@ -17,3 +17,4 @@ from .visualize import *
 from .interpret import *
 from .fragmentation import *
 from .fourier_kan import *
+from .visualize_attention import *
