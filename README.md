@@ -45,6 +45,97 @@
   - molgraph/visualize.py, molgraph/molgraphdisplay.py：用于生成分子图片、子结构高亮与预测解释视图。
 - 解释流程通常是先用 trained checkpoint 做预测，再调用 interpret.py 计算贡献度/重要性评分并可视化。
 
+### 注意力权重可视化 (Attention Visualization)
+
+MVKAN 提供了强大的注意力可视化功能，可以直观展示模型关注的分子区域，增强模型的可解释性。
+
+#### 核心功能
+- **原子级注意力可视化**：使用颜色梯度在分子结构上显示注意力强度
+- **颜色映射**：支持多种颜色方案（蓝色到红色、冷暖色等）
+- **高质量输出**：支持 PNG 和 SVG 格式，包含颜色条说明
+
+#### 快速使用
+
+```python
+from molgraph.visualize_attention import visualize_molecule_attention, quick_visualize
+
+# 方法1: 快速可视化（使用随机/模拟权重）
+fig = quick_visualize("c1ccccc1O")  # 苯酚
+fig.savefig("phenol_attention.png", dpi=300)
+
+# 方法2: 指定注意力权重
+smiles = "CCO"  # 乙醇
+weights = [0.2, 0.5, 0.9]  # 每个原子的注意力权重
+fig = visualize_molecule_attention(
+    smiles,
+    weights,
+    title="Ethanol Attention",
+    cmap_name='RdBu_r',  # 蓝色(低) -> 红色(高)
+    show_colorbar=True
+)
+fig.savefig("ethanol_attention.png", dpi=300)
+```
+
+#### 批量可视化多个分子
+
+```python
+from molgraph.visualize_attention import visualize_multiple_molecules
+
+molecules = [
+    {'smiles': 'CC(=O)OC1=CC=CC=C1C(=O)O', 'weights': [...], 'title': 'Aspirin'},
+    {'smiles': 'CN1C=NC2=C1C(=O)N(C(=O)N2C)C', 'weights': [...], 'title': 'Caffeine'}
+]
+
+fig = visualize_multiple_molecules(
+    molecules,
+    ncols=2,
+    save_path='results/attention_visualization/batch_visualization.png'
+)
+```
+
+#### 运行示例脚本
+
+```bash
+# 生成示例可视化
+python examples/visualize_attention_example.py
+
+# 指定自定义分子
+python examples/visualize_attention_example.py --smiles "CCO" "c1ccccc1O"
+
+# 使用不同颜色映射
+python examples/visualize_attention_example.py --cmap YlOrRd
+```
+
+#### 可视化输出说明
+- **颜色含义**：
+  - 蓝色/冷色 → 低注意力（模型较少关注）
+  - 红色/暖色 → 高注意力（模型重点关注）
+- **颜色条 (Colorbar)**：显示注意力权重的数值范围 [0, 1]
+- **输出格式**：PNG（光栅）、SVG（矢量，可缩放）
+
+#### 从训练模型提取注意力
+
+```python
+from molgraph.testing import Tester
+from molgraph.visualize_attention import extract_attention_weights_from_model
+
+# 加载训练好的模型并测试
+tester = Tester(args, args_test)
+tester.test(test_loader, return_attention_weights=True)
+
+# 获取注意力权重
+att_mol = tester.getAttentionMol()
+
+# 可视化
+from molgraph.interpret import plot_attentions
+fig = plot_attentions(args, sample_graph, att_mol)
+```
+
+#### 相关文件
+- `molgraph/visualize_attention.py`：注意力可视化核心模块
+- `examples/visualize_attention_example.py`：示例脚本
+- `results/attention_visualization/`：可视化输出目录
+
 ## 七、复现实验建议
 - 环境与依赖
   - 仓库为 Python 项目，主要依赖可能包括 rdkit、torch（或 torch_geometric）、numpy、pandas 等。请参照仓库顶部或 README 补充依赖。
